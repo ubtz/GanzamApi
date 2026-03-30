@@ -1,0 +1,453 @@
+-- GanzamApi MSSQL schema
+-- Modules:
+-- 1. Users / Auth
+-- 2. Stores / Inventory
+-- 3. Products / Categories
+-- 4. Cart / Orders
+-- 5. Delivery / Couriers
+-- 6. Loyalty
+-- 7. Payments
+-- 8. Promotions / Coupons
+-- 9. Notifications
+-- 10. System / Audit
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE TABLE Users (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Phone NVARCHAR(20) NOT NULL UNIQUE,
+    Email NVARCHAR(100) NULL,
+    PasswordHash NVARCHAR(255) NOT NULL,
+    FirstName NVARCHAR(100) NULL,
+    LastName NVARCHAR(100) NULL,
+    Role NVARCHAR(20) NOT NULL DEFAULT 'customer',
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL
+);
+GO
+
+CREATE TABLE UserAddresses (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL,
+    Label NVARCHAR(50) NULL,
+    AddressText NVARCHAR(255) NOT NULL,
+    Latitude DECIMAL(10,7) NOT NULL,
+    Longitude DECIMAL(10,7) NOT NULL,
+    IsDefault BIT NOT NULL DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE UserRefreshTokens (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL,
+    TokenHash NVARCHAR(255) NOT NULL,
+    ExpiresAt DATETIME2 NOT NULL,
+    RevokedAt DATETIME2 NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE Stores (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Code NVARCHAR(30) NOT NULL UNIQUE,
+    Name NVARCHAR(120) NOT NULL,
+    Address NVARCHAR(255) NOT NULL,
+    Latitude DECIMAL(10,7) NOT NULL,
+    Longitude DECIMAL(10,7) NOT NULL,
+    DeliveryRadiusKm DECIMAL(6,2) NOT NULL DEFAULT 5,
+    IsActive BIT NOT NULL DEFAULT 1,
+    OpensAt TIME NULL,
+    ClosesAt TIME NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE StoreZones (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    StoreId BIGINT NOT NULL,
+    ZoneName NVARCHAR(100) NOT NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id)
+);
+GO
+
+CREATE TABLE Products (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    SKU NVARCHAR(50) NOT NULL UNIQUE,
+    Name NVARCHAR(255) NOT NULL,
+    Description NVARCHAR(MAX) NULL,
+    Brand NVARCHAR(100) NULL,
+    UnitName NVARCHAR(50) NULL,
+    Barcode NVARCHAR(100) NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NULL
+);
+GO
+
+CREATE TABLE Categories (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ParentId BIGINT NULL,
+    Name NVARCHAR(120) NOT NULL,
+    ImageUrl NVARCHAR(500) NULL,
+    SortOrder INT NOT NULL DEFAULT 0,
+    IsActive BIT NOT NULL DEFAULT 1,
+    FOREIGN KEY (ParentId) REFERENCES Categories(Id)
+);
+GO
+
+CREATE TABLE ProductCategories (
+    ProductId BIGINT NOT NULL,
+    CategoryId BIGINT NOT NULL,
+    PRIMARY KEY (ProductId, CategoryId),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id),
+    FOREIGN KEY (CategoryId) REFERENCES Categories(Id)
+);
+GO
+
+CREATE TABLE ProductImages (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ProductId BIGINT NOT NULL,
+    ImageUrl NVARCHAR(500) NOT NULL,
+    IsMain BIT NOT NULL DEFAULT 0,
+    SortOrder INT NOT NULL DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE StoreProducts (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    StoreId BIGINT NOT NULL,
+    ProductId BIGINT NOT NULL,
+    Price DECIMAL(18,2) NOT NULL,
+    StockQty DECIMAL(18,3) NOT NULL DEFAULT 0,
+    ReservedQty DECIMAL(18,3) NOT NULL DEFAULT 0,
+    MinStockQty DECIMAL(18,3) NOT NULL DEFAULT 0,
+    IsAvailable BIT NOT NULL DEFAULT 1,
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT UQ_StoreProducts UNIQUE (StoreId, ProductId),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE InventoryTransactions (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    StoreId BIGINT NOT NULL,
+    ProductId BIGINT NOT NULL,
+    OrderId BIGINT NULL,
+    RefType NVARCHAR(30) NOT NULL,
+    Qty DECIMAL(18,3) NOT NULL,
+    Note NVARCHAR(255) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CreatedByUserId BIGINT NULL,
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE Carts (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL UNIQUE,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE CartItems (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    CartId BIGINT NOT NULL,
+    ProductId BIGINT NOT NULL,
+    Qty DECIMAL(18,3) NOT NULL,
+    AddedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT UQ_CartItems UNIQUE (CartId, ProductId),
+    FOREIGN KEY (CartId) REFERENCES Carts(Id),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE Orders (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderNo NVARCHAR(30) NOT NULL UNIQUE,
+    UserId BIGINT NOT NULL,
+    StoreId BIGINT NULL,
+    AddressId BIGINT NOT NULL,
+    Status NVARCHAR(30) NOT NULL,
+    PaymentStatus NVARCHAR(30) NOT NULL DEFAULT 'pending',
+    FulfillmentType NVARCHAR(20) NOT NULL DEFAULT 'delivery',
+    Subtotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+    DiscountAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    DeliveryFee DECIMAL(18,2) NOT NULL DEFAULT 0,
+    LoyaltyUsedPoints INT NOT NULL DEFAULT 0,
+    LoyaltyDiscountAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    TotalAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    Note NVARCHAR(500) NULL,
+    PlacedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    ConfirmedAt DATETIME2 NULL,
+    PreparingAt DATETIME2 NULL,
+    DeliveringAt DATETIME2 NULL,
+    DeliveredAt DATETIME2 NULL,
+    CancelledAt DATETIME2 NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (AddressId) REFERENCES UserAddresses(Id)
+);
+GO
+
+CREATE TABLE OrderItems (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL,
+    ProductId BIGINT NOT NULL,
+    ProductName NVARCHAR(255) NOT NULL,
+    UnitPrice DECIMAL(18,2) NOT NULL,
+    Qty DECIMAL(18,3) NOT NULL,
+    LineTotal DECIMAL(18,2) NOT NULL,
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE OrderStatusHistory (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL,
+    OldStatus NVARCHAR(30) NULL,
+    NewStatus NVARCHAR(30) NOT NULL,
+    ChangedByUserId BIGINT NULL,
+    Note NVARCHAR(255) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id)
+);
+GO
+
+CREATE TABLE OrderReservations (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL,
+    StoreId BIGINT NOT NULL,
+    ProductId BIGINT NOT NULL,
+    ReservedQty DECIMAL(18,3) NOT NULL,
+    Status NVARCHAR(20) NOT NULL DEFAULT 'active',
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    ReleasedAt DATETIME2 NULL,
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (ProductId) REFERENCES Products(Id)
+);
+GO
+
+CREATE TABLE Couriers (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NULL,
+    Code NVARCHAR(30) NOT NULL UNIQUE,
+    Name NVARCHAR(120) NOT NULL,
+    Phone NVARCHAR(20) NOT NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    CurrentStatus NVARCHAR(20) NOT NULL DEFAULT 'offline',
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE StoreCouriers (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    StoreId BIGINT NOT NULL,
+    CourierId BIGINT NOT NULL,
+    IsPrimaryStore BIT NOT NULL DEFAULT 0,
+    CONSTRAINT UQ_StoreCouriers UNIQUE (StoreId, CourierId),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (CourierId) REFERENCES Couriers(Id)
+);
+GO
+
+CREATE TABLE Deliveries (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL UNIQUE,
+    StoreId BIGINT NOT NULL,
+    CourierId BIGINT NULL,
+    Status NVARCHAR(30) NOT NULL DEFAULT 'pending',
+    AssignedAt DATETIME2 NULL,
+    PickedUpAt DATETIME2 NULL,
+    DeliveredAt DATETIME2 NULL,
+    FailedAt DATETIME2 NULL,
+    DeliveryNote NVARCHAR(255) NULL,
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id),
+    FOREIGN KEY (StoreId) REFERENCES Stores(Id),
+    FOREIGN KEY (CourierId) REFERENCES Couriers(Id)
+);
+GO
+
+CREATE TABLE CourierLocations (
+    CourierId BIGINT PRIMARY KEY,
+    Latitude DECIMAL(10,7) NOT NULL,
+    Longitude DECIMAL(10,7) NOT NULL,
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (CourierId) REFERENCES Couriers(Id)
+);
+GO
+
+CREATE TABLE DeliveryTrackingEvents (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    DeliveryId BIGINT NOT NULL,
+    EventType NVARCHAR(50) NOT NULL,
+    Latitude DECIMAL(10,7) NULL,
+    Longitude DECIMAL(10,7) NULL,
+    Note NVARCHAR(255) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (DeliveryId) REFERENCES Deliveries(Id)
+);
+GO
+
+CREATE TABLE LoyaltyAccounts (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL UNIQUE,
+    PointsBalance INT NOT NULL DEFAULT 0,
+    LifetimeEarnedPoints INT NOT NULL DEFAULT 0,
+    LifetimeRedeemedPoints INT NOT NULL DEFAULT 0,
+    Tier NVARCHAR(20) NOT NULL DEFAULT 'silver',
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE LoyaltyTransactions (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL,
+    OrderId BIGINT NULL,
+    Type NVARCHAR(30) NOT NULL,
+    Points INT NOT NULL,
+    AmountValue DECIMAL(18,2) NULL,
+    Note NVARCHAR(255) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id),
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id)
+);
+GO
+
+CREATE TABLE LoyaltyRules (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    PointsPerAmount DECIMAL(18,2) NOT NULL,
+    AmountPerPoint DECIMAL(18,2) NOT NULL,
+    MaxRedeemPercent DECIMAL(5,2) NOT NULL DEFAULT 30,
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE Payments (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL,
+    Provider NVARCHAR(30) NOT NULL,
+    ProviderTransactionId NVARCHAR(100) NULL,
+    Amount DECIMAL(18,2) NOT NULL,
+    CurrencyCode NVARCHAR(10) NOT NULL DEFAULT 'MNT',
+    Status NVARCHAR(30) NOT NULL DEFAULT 'pending',
+    PaidAt DATETIME2 NULL,
+    RawResponse NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id)
+);
+GO
+
+CREATE TABLE PaymentWebhooks (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Provider NVARCHAR(30) NOT NULL,
+    EventType NVARCHAR(50) NOT NULL,
+    Payload NVARCHAR(MAX) NOT NULL,
+    Processed BIT NOT NULL DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE Coupons (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Code NVARCHAR(50) NOT NULL UNIQUE,
+    Name NVARCHAR(120) NOT NULL,
+    DiscountType NVARCHAR(20) NOT NULL,
+    DiscountValue DECIMAL(18,2) NOT NULL,
+    MinOrderAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    MaxDiscountAmount DECIMAL(18,2) NULL,
+    StartsAt DATETIME2 NULL,
+    EndsAt DATETIME2 NULL,
+    UsageLimit INT NULL,
+    PerUserLimit INT NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE OrderCoupons (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OrderId BIGINT NOT NULL,
+    CouponId BIGINT NOT NULL,
+    DiscountAmount DECIMAL(18,2) NOT NULL,
+    FOREIGN KEY (OrderId) REFERENCES Orders(Id),
+    FOREIGN KEY (CouponId) REFERENCES Coupons(Id)
+);
+GO
+
+CREATE TABLE Notifications (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL,
+    Title NVARCHAR(150) NOT NULL,
+    Body NVARCHAR(500) NOT NULL,
+    Type NVARCHAR(30) NOT NULL,
+    IsRead BIT NOT NULL DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE UserDevices (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL,
+    DeviceToken NVARCHAR(255) NOT NULL,
+    Platform NVARCHAR(20) NOT NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    LastSeenAt DATETIME2 NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    FOREIGN KEY (UserId) REFERENCES Users(Id)
+);
+GO
+
+CREATE TABLE AppSettings (
+    [Key] NVARCHAR(100) PRIMARY KEY,
+    [Value] NVARCHAR(MAX) NOT NULL,
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE TABLE AuditLogs (
+    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NULL,
+    Action NVARCHAR(100) NOT NULL,
+    EntityType NVARCHAR(50) NOT NULL,
+    EntityId NVARCHAR(50) NOT NULL,
+    OldValue NVARCHAR(MAX) NULL,
+    NewValue NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE INDEX IX_UserAddresses_UserId ON UserAddresses(UserId);
+CREATE INDEX IX_StoreProducts_StoreId_ProductId ON StoreProducts(StoreId, ProductId);
+CREATE INDEX IX_StoreProducts_ProductId ON StoreProducts(ProductId);
+CREATE INDEX IX_Orders_UserId ON Orders(UserId);
+CREATE INDEX IX_Orders_StoreId ON Orders(StoreId);
+CREATE INDEX IX_Orders_Status ON Orders(Status);
+CREATE INDEX IX_Orders_PlacedAt ON Orders(PlacedAt);
+CREATE INDEX IX_OrderItems_OrderId ON OrderItems(OrderId);
+CREATE INDEX IX_Deliveries_CourierId ON Deliveries(CourierId);
+CREATE INDEX IX_Deliveries_Status ON Deliveries(Status);
+CREATE INDEX IX_LoyaltyTransactions_UserId ON LoyaltyTransactions(UserId);
+CREATE INDEX IX_Payments_OrderId ON Payments(OrderId);
+CREATE INDEX IX_Notifications_UserId_IsRead ON Notifications(UserId, IsRead);
+GO
