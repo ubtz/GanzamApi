@@ -1,4 +1,4 @@
-package config
+package conf
 
 import "fmt"
 
@@ -17,17 +17,16 @@ func getConfig(env string) DBConfig {
 			Port:     1433,
 			User:     "lognorm",
 			Password: "UBjsc@norm.nrp",
-			Database: "norm",
+			Database: "Ganzam",
 		}
 	}
 
-	// Default to test.
 	return DBConfig{
 		Server:   "172.30.30.30",
 		Port:     1433,
 		User:     "sa",
 		Password: "test",
-		Database: "test",
+		Database: "Ganzam",
 	}
 }
 
@@ -45,4 +44,9 @@ func GetDBConnectionString() string {
 		cfg.Port,
 		cfg.Database,
 	)
+}
+
+func GetDBTargetSummary() string {
+	cfg := GetDBConfig()
+	return fmt.Sprintf("env=%s server=%s port=%d database=%s user=%s", GetAppEnv(), cfg.Server, cfg.Port, cfg.Database, cfg.User)
 }

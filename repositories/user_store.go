@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
-	"GanzamApi/config"
+	conf "GanzamApi/conf"
 	"GanzamApi/models"
 
 	_ "github.com/denisenkom/go-mssqldb"
@@ -22,20 +23,48 @@ type UserStore interface {
 }
 
 type MSSQLUserStore struct {
-	db *sql.DB
+	db      *sql.DB
+	columns map[string]bool
 }
 
 func NewMSSQLUserStore() (*MSSQLUserStore, error) {
-	db, err := sql.Open("sqlserver", config.GetDBConnectionString())
+	db, err := sql.Open("sqlserver", conf.GetDBConnectionString())
 	if err != nil {
 		return nil, err
 	}
-	return &MSSQLUserStore{db: db}, nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+
+	columns, err := loadUsersColumns(ctx, db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	required := []string{"Id", "PasswordHash"}
+	for _, col := range required {
+		if !columns[strings.ToLower(col)] {
+			_ = db.Close()
+			return nil, fmt.Errorf("Users table is missing required column %q. Available columns: %s", col, joinColumnNames(columns))
+		}
+	}
+
+	return &MSSQLUserStore{db: db, columns: columns}, nil
 }
 
 func (s *MSSQLUserStore) FindByPhone(ctx context.Context, phone string) (*models.User, error) {
+	if !s.columns["phone"] {
+		return nil, fmt.Errorf("Users table is missing required column %q. Available columns: %s", "Phone", joinColumnNames(s.columns))
+	}
+
 	query := `
-SELECT Id, Phone, Email, PasswordHash, FirstName, LastName, Role, IsActive, CreatedAt, UpdatedAt
+SELECT Id, Phone, Email, PasswordHash, FirstName, LastName, CreatedAt, UpdatedAt
 FROM Users
 WHERE Phone = @p1`
 
@@ -50,8 +79,6 @@ WHERE Phone = @p1`
 		&user.PasswordHash,
 		&firstName,
 		&lastName,
-		&user.Role,
-		&user.IsActive,
 		&user.CreatedAt,
 		&updatedAt,
 	)
@@ -62,6 +89,8 @@ WHERE Phone = @p1`
 		return nil, err
 	}
 
+	user.IsActive = true
+	user.Role = "customer"
 	if email.Valid {
 		user.Email = &email.String
 	}
@@ -79,10 +108,14 @@ WHERE Phone = @p1`
 }
 
 func (s *MSSQLUserStore) Create(ctx context.Context, req models.RegisterRequest, passwordHash string) (*models.User, error) {
+	if !s.columns["phone"] {
+		return nil, fmt.Errorf("Users table is missing required column %q. Available columns: %s", "Phone", joinColumnNames(s.columns))
+	}
+
 	query := `
-INSERT INTO Users (Phone, Email, PasswordHash, FirstName, LastName, Role, IsActive)
-OUTPUT INSERTED.Id, INSERTED.Phone, INSERTED.Email, INSERTED.FirstName, INSERTED.LastName, INSERTED.Role, INSERTED.IsActive, INSERTED.CreatedAt, INSERTED.UpdatedAt
-VALUES (@p1, @p2, @p3, @p4, @p5, 'customer', 1)`
+INSERT INTO Users (Phone, Email, PasswordHash, FirstName, LastName)
+OUTPUT INSERTED.Id, INSERTED.Phone, INSERTED.Email, INSERTED.FirstName, INSERTED.LastName, INSERTED.CreatedAt, INSERTED.UpdatedAt
+VALUES (@p1, @p2, @p3, @p4, @p5)`
 
 	var user models.User
 	var email, firstName, lastName sql.NullString
@@ -102,8 +135,6 @@ VALUES (@p1, @p2, @p3, @p4, @p5, 'customer', 1)`
 		&email,
 		&firstName,
 		&lastName,
-		&user.Role,
-		&user.IsActive,
 		&user.CreatedAt,
 		&updatedAt,
 	)
@@ -112,6 +143,8 @@ VALUES (@p1, @p2, @p3, @p4, @p5, 'customer', 1)`
 	}
 
 	user.PasswordHash = passwordHash
+	user.IsActive = true
+	user.Role = "customer"
 	if email.Valid {
 		user.Email = &email.String
 	}
@@ -134,6 +167,45 @@ func nullableString(value string) interface{} {
 		return nil
 	}
 	return trimmed
+}
+
+func loadUsersColumns(ctx context.Context, db *sql.DB) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'Users'`)
+	if err != nil {
+		return nil, fmt.Errorf("load Users columns: %w", err)
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return nil, fmt.Errorf("scan Users columns: %w", err)
+		}
+		columns[strings.ToLower(column)] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read Users columns: %w", err)
+	}
+
+	if len(columns) == 0 {
+		return nil, errors.New("Users table was not found in the current database")
+	}
+
+	return columns, nil
+}
+
+func joinColumnNames(columns map[string]bool) string {
+	names := make([]string, 0, len(columns))
+	for name := range columns {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 type MemoryUserStore struct {

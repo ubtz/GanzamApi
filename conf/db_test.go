@@ -1,4 +1,4 @@
-package config
+package conf
 
 import "testing"
 
@@ -17,7 +17,7 @@ func TestGetConfigUsesProdValues(t *testing.T) {
 	if cfg.Password != "UBjsc@norm.nrp" {
 		t.Fatalf("expected prod password, got %q", cfg.Password)
 	}
-	if cfg.Database != "norm" {
+	if cfg.Database != "Ganzam" {
 		t.Fatalf("expected prod database, got %q", cfg.Database)
 	}
 }
@@ -37,7 +37,7 @@ func TestGetConfigDefaultsToTestValues(t *testing.T) {
 	if cfg.Password != "test" {
 		t.Fatalf("expected test password, got %q", cfg.Password)
 	}
-	if cfg.Database != "test" {
+	if cfg.Database != "Ganzam" {
 		t.Fatalf("expected test database, got %q", cfg.Database)
 	}
 }
@@ -47,7 +47,7 @@ func TestGetDBConfigUsesAppEnv(t *testing.T) {
 
 	cfg := GetDBConfig()
 
-	if cfg.Database != "norm" {
+	if cfg.Database != "Ganzam" {
 		t.Fatalf("expected prod database from app env, got %q", cfg.Database)
 	}
 }

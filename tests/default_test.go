@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"GanzamApi/config"
+	conf "GanzamApi/conf"
 	"GanzamApi/models"
 	"GanzamApi/repositories"
 	"GanzamApi/services"
@@ -50,7 +50,7 @@ func TestBeego(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	_ = os.Setenv("APP_ENV", config.EnvTest)
+	_ = os.Setenv("APP_ENV", conf.EnvTest)
 	_ = os.Setenv("TEST_API_URL", "https://test.ganzam.local")
 
 	r, _ := http.NewRequest("GET", "/version", nil)
@@ -67,7 +67,7 @@ func TestVersionEndpoint(t *testing.T) {
 		Convey("Response Should Return Current Version", func() {
 			So(err, ShouldBeNil)
 			So(body["version"], ShouldEqual, controllers.CurrentVersion)
-			So(body["environment"], ShouldEqual, config.EnvTest)
+			So(body["environment"], ShouldEqual, conf.EnvTest)
 			So(body["target_url"], ShouldEqual, "https://test.ganzam.local")
 		})
 	})
@@ -77,7 +77,7 @@ func TestRegisterEndpoint(t *testing.T) {
 	controllers.SetAuthService(services.NewAuthService(repositories.NewMemoryUserStore()))
 
 	body := []byte(`{"phone":"99112233","email":"user@test.com","password":"secret123","first_name":"Test","last_name":"User"}`)
-	r, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	r, _ := http.NewRequest("POST", "/post/register", bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	beego.BeeApp.Handlers.ServeHTTP(w, r)
@@ -114,7 +114,7 @@ func TestLoginEndpoint(t *testing.T) {
 	}
 
 	body := []byte(`{"phone":"88110022","password":"secret123"}`)
-	r, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+	r, _ := http.NewRequest("POST", "/post/login", bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	beego.BeeApp.Handlers.ServeHTTP(w, r)
