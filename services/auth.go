@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -112,7 +113,7 @@ func generateToken(user *models.User) (string, error) {
 	payload := base64.RawURLEncoding.EncodeToString(payloadJSON)
 	unsigned := header + "." + payload
 
-	mac := hmac.New(sha256.New, []byte("ganzam-secret"))
+	mac := hmac.New(sha256.New, []byte(getJWTSecret()))
 	_, err = mac.Write([]byte(unsigned))
 	if err != nil {
 		return "", err
@@ -120,4 +121,12 @@ func generateToken(user *models.User) (string, error) {
 
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return unsigned + "." + signature, nil
+}
+
+func getJWTSecret() string {
+	if value := strings.TrimSpace(os.Getenv("JWT_SECRET")); value != "" {
+		return value
+	}
+
+	return "ganzam-secret"
 }

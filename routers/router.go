@@ -16,6 +16,7 @@ func init() {
 	postNs := beego.NewNamespace("/post",
 		beego.NSRouter("/register", &controllers.Register{}, "post:PostRegister"),
 		beego.NSRouter("/login", &controllers.UserLogin{}, "post:PostLogin"),
+		beego.NSRouter("/upload", &controllers.UploadImage{}, "post:Post"),
 	)
 	beego.AddNamespace(postNs)
 
@@ -23,4 +24,5 @@ func init() {
 	beego.Router("/version", &controllers.GetVersion{}, "get:GetVersion")
 	beego.Router("/api/v1/auth/register", &controllers.Register{}, "post:PostRegister")
 	beego.Router("/api/v1/auth/login", &controllers.UserLogin{}, "post:PostLogin")
+	beego.Router("/api/v1/upload", &controllers.UploadImage{}, "post:Post")
 }

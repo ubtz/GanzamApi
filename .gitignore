@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+*.pem
 
 # Build outputs
 *.exe
@@ -11,11 +12,13 @@
 *.dylib
 *.test
 *.out
+backend
 bin/
 dist/
 
 # Go workspace noise
 coverage.out
+vendor/
 
 # IDE files
 .vscode/

@@ -1,6 +1,11 @@
 package conf
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
 
 type DBConfig struct {
 	Server   string
@@ -31,7 +36,27 @@ func getConfig(env string) DBConfig {
 }
 
 func GetDBConfig() DBConfig {
-	return getConfig(GetAppEnv())
+	cfg := getConfig(GetAppEnv())
+
+	if value := strings.TrimSpace(os.Getenv("DB_SERVER")); value != "" {
+		cfg.Server = value
+	}
+	if value := strings.TrimSpace(os.Getenv("DB_PORT")); value != "" {
+		if port, err := strconv.Atoi(value); err == nil {
+			cfg.Port = port
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv("DB_USER")); value != "" {
+		cfg.User = value
+	}
+	if value := os.Getenv("DB_PASSWORD"); value != "" {
+		cfg.Password = value
+	}
+	if value := strings.TrimSpace(os.Getenv("DB_NAME")); value != "" {
+		cfg.Database = value
+	}
+
+	return cfg
 }
 
 func GetDBConnectionString() string {
